@@ -1,6 +1,6 @@
-# vis-cross-provinces-enrollment
+# Visualization for cross province migration
 
-Visualization for analyzing cross provinces enrollment in XJTUDLC.
+Visualization for analyzing cross provinces migration enrollment in XJTUDLC.
 
 The old version of this program using MySQL to query students' raw data 
 which was stored in a local MySQL database which is not suitable to migrated to internet. 
