@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Cross Province Enrollment</title>
+    <style>
+        html,body{ margin:0; padding:0; overflow:hidden;}
+    </style>
+</head>
+<body>
+<div id="main" style="width:1920px;height:1080px;"></div>
+<script src="/static/js/echarts-all.js"></script>
+<script src="/static/js/jquery-1.9.1.js"></script>
+<script src="/static/js/dat.gui.min.js"></script>
+<script src="/static/js/alasql.min.js"></script>
+<script type="text/sql" id="sql_create_tables">
+CREATE TABLE stus (
+    tbpkid INT PRIMARY KEY,
+    batch INT,
+    lc STRING,
+    prov INT, 
+    cnty INT,
+    lc_prov INT,
+    lc_cnty INT
+);
+</script>
+<script>
+// local database
+alasql('SOURCE "#sql_create_tables"');
+// Dat.GUI
+var gui;
+// The Chart object of China map
+var myChart = echarts.init(document.getElementById('main'));
+// Default learning center
+var lc = "000-全部学习中心";
+// default student source
+var ss = '00';
+// default batch of enrollment
+var bt = '1409';
+// configs for dat.gui use
+var cfg = {
+    // Black Style
+    bgColor: '#000000',
+    provAreaColor: '#000000',    
+    enableLarge: true,
+    enableBundling: false,
+    enableGroup: false,
+    lineColor: 'rgba(2, 166, 253, 0.08)',
+    autoLineColor: null,
+    fixLineColor: 'rgba(2, 166, 253, 0.08)',
+    enableSourceShow: false,
+    enableSourceLabel: false,
+    group: 'nogroup',
+    currentBatch: bt,
+    allBatches: ['1409'],
+    defaultLearnCenter: "000-全部学习中心",
+    currentLearnCenter: lc,
+    learnCenters: ["000-全部学习中心"],
+    currentProvince: "00-全国",
+    allProvinces: [
+        "00-全国","11-北京","12-天津","13-河北","14-山西","15-内蒙古",
+        "21-辽宁","22-吉林","23-黑龙江","31-上海","32-江苏","33-浙江",
+        "34-安徽","35-福建","36-江西","37-山东","41-河南","42-湖北",
+        "43-湖南","44-广东","45-广西","46-海南","50-重庆","51-四川",
+        "52-贵州","53-云南","54-西藏","61-陕西","62-甘肃","63-青海",
+        "64-宁夏","65-新疆"],
+    presentationMode: false,
+    presentationInterval: 15,
+    refresh: function() {
+        getCrossProvinceData();
+    }
+};
+// get geo data
+var geoCoord;
+function getGeoCoord (name) {
+    return geoCoord[name];
+}
+$.ajax({
+    type: 'get',
+    url: '/static/data/coords.json',
+    async: false,
+    success: function(data){
+        geoCoord = data;
+    },
+    dataType: 'json'
+});
+var lcenters;
+$.ajax({
+    type: 'get',
+    url: '/static/data/lcenters.json',
+    async: false,
+    success: function(data){
+        lcenters = data;
+        for (var lcc in data) {
+            cfg.learnCenters.push(lcc + "-" + data[lcc]['ca']);
+        }
+    },
+    dataType: 'json'
+});
+// update config's learnCenters
+
+var areas;
+function getArea(code) {
+    if (areas.hasOwnProperty(code)) {
+        return areas[code];
+    } else {
+        return {'cc': '610103', 'name': "陕西省西安市碑林区"};
+    }
+}
+$.ajax({
+    type: 'get',
+    url: '/static/data/areas.json',
+    async: false,
+    success: function(data){
+        areas = data;
+    },
+    dataType: 'json'
+});
+
+
+// EChart option of China map
+function getOption() {
+    return {
+        backgroundColor: cfg.bgColor,
+        title : {
+            text: 'Cross Province Enrollment Detail ' + cfg.currentBatch,
+            x:'left',
+            y:'top',
+            textStyle: {
+                color: 'white'
+            }
+        },
+        tooltip : {
+            trigger: 'item',
+            formatter: function(params, ticket, callback) {
+                // console.log(params);
+                return params[1];
+            }
+        },
+        dataRange: {
+            min : 1,
+            max : 100,
+            calculable : true,
+            color: ['#ff3333','orange','yellow','lime','aqua'],
+            textStyle:{
+                color:'#fff'
+            }
+        },
+        series : [{
+            name: "Cross Province Enrollment Stream",
+            type: 'map',
+            mapType: 'china',
+
+            itemStyle: {
+                normal: {
+                    borderColor:'rgba(100,149,237,0.7)',
+                    borderWidth:0.5,
+                    areaStyle: {
+                        color: cfg.provAreaColor
+                    },
+                    label:{
+                        show: true,
+                        textStyle: {
+                            color: 'rgba(200,200,237,0.2)'
+                        }
+                    }
+                }
+            },
+            data: [{}],
+            hoverable: false,
+            clickable: true,
+            roam: true,
+            markLine: {
+                effect: {
+                    color: 'rgba(204, 246, 255, 0.2)',
+                    show: true,
+                    period: 40
+                },
+                bundling: {
+                    enable: cfg.enableBundling
+                },
+                large: cfg.enableLarge,
+                smooth: true,
+                smoothness: 0.1,
+                symbol: ['none', 'none'],
+                symbolSize: 1,
+                itemStyle: {
+                    normal: {
+                        lineStyle: {
+                            color: cfg.lineColor,
+                            type: 'solid',
+                            width: 0.5,
+                            opacity: 0.2
+                        },
+                        label: {
+                            show: false
+                        }
+                    }
+                },
+                data: []
+            },
+            markPoint: {
+                effect: {
+                    show: true
+                },
+                symbol: 'triangle',
+                symbolSize: 5,
+                itemStyle: {
+                    normal: {
+                        color: 'rgba(255, 0, 0, 0.5)',
+                        label: {
+                            show: false
+                        }
+                    }
+                },
+                data: []
+            }
+        },{
+            name: "Student Source",
+            type: 'map',
+            mapType: 'china',
+            data: [{}],
+            hoverable: true,
+            clickable: true,
+            roam: true,
+            markPoint: {
+                effect: {
+                    show: cfg.enableSourceShow
+                },
+                symbol: 'emptyCircle',
+                symbolSize: function(v){
+                    return 1+v/2;
+                },
+                itemStyle: {
+                    normal: {
+                        label: {
+                            show: cfg.enableSourceLabel,
+                            formatter: function(params, ticket, callback) {
+                                //console.log(params);
+                                if (cfg.enableGroup) {
+                                    return params.value;
+                                } else {
+                                    return ''
+                                }
+                            }
+                        }
+                    }
+                },
+                data: []
+            }
+        }]
+    };
+};
+
+function getCrossProvinceData(){
+    var cur_lc = cfg.currentLearnCenter.split('-')[0];
+    var cur_ss = cfg.currentProvince.split('-')[0];
+    var cur_bt = cfg.currentBatch;
+    // No need to enable large when data is small
+    if (cur_lc=='000' && cur_ss=='00') { cfg.enableLarge = true;}
+    else {cfg.enableLarge = false; }
+
+    //{lc:cur_lc, ss:cur_ss, bt: cur_bt, group: cfg.group},
+    // get data
+    var sql = "select lc, cnty as ss, 1 as cnt\n" +
+              "from stus\n" +
+              "where prov!=lc_prov\n" +
+              "  and batch=" + cur_bt + "\n";
+    if (cfg.group == 'group') {
+        sql = "select lc, concat(prov, '0000') as ss, count(tbpkid) as cnt\n" + 
+              "from stus\n" +
+              "where prov!=lc_prov\n" +
+              "  and batch=" + cur_bt + "\n";
+    }
+
+    // LCXXX
+    if (cur_lc!='000') { sql += "  and lc='LC" + cur_lc + "'\n"; }
+    if (cur_ss!='00') { sql += "  and prov=" + cur_ss + "\n"; }
+    if (cfg.group == 'group') { sql += "group by lc, prov\n"; }
+
+    console.log(sql);
+    var dt = {'allCross':[], 'allLC':[], 'allSource':[]};
+
+    // query data from alasql
+    var rs = alasql(sql);
+    console.log('rs: ' + rs.length);
+    console.log(rs);
+    var lc_list = [];
+    var ss_list = [];
+    for (var i=0; i<rs.length; i++) {
+        var r = rs[i];
+        // alaSQL's bug maybe, I must prepend an string and handle group by bug
+        if (typeof(r['lc']) == 'undefined') { continue; }
+        var r_lc = r['lc'].substring(2);
+        var r_ss = r['ss'];
+        var r_cnt = r['cnt'];
+        // Translate into name
+        var lc_abbr = lcenters[r_lc]['ca'];
+        var ss_name = getArea(r_ss)['name'];
+
+        // console.log(r_lc + ', ' + r_ss + ', ' + r_cnt + ': ' + 
+        //     lc_abbr + '(' + getGeoCoord(lc_abbr) + ')' + ' | ' + 
+        //     ss_name + '(' + getGeoCoord(ss_name) + ')');
+
+        // append sll students
+        dt['allCross'].push({
+            "start": ss_name,
+            "end" : lc_abbr, 
+            'cnt': r_cnt
+        });
+
+        // append all lcs
+        if (lc_list.indexOf(r_lc)<0) {
+            lc_list.push(r_lc);
+            dt['allLC'].push({'name': lc_abbr});
+        }
+
+        // append group?
+        if ((r_lc != '000' || r_ss != '00') && ss_list.indexOf(r_ss)<0) {
+            ss_list.push(r_ss);
+            dt['allSource'].push({'name': ss_name, 'cnt': r_cnt});
+        }
+    }
+    // to be compatible with old design
+    var data = {'data': dt, 'success': true};
+    console.log(data);
+
+    // Refresh the Map
+    myChart = echarts.init(document.getElementById('main'));
+    option = getOption();
+
+    // Set the stream data
+    option.series[0].markLine.data = data.data.allCross.map(function (line) {
+        return [{
+            name: line.start + "(" + line.cnt + ")",
+            geoCoord: getGeoCoord(line.start)
+        }, {
+            value: line.cnt,
+            name: line.end,
+            geoCoord: getGeoCoord(line.end)
+        }]
+    });
+
+    // Set the learn center points
+    option.series[0].markPoint.data = data.data.allLC.map(function (point) {
+        return {
+            geoCoord: getGeoCoord(point.name),
+            name: point.name
+        }
+    });
+
+    // Set the student source points
+    option.series[1].markPoint.data = data.data.allSource.map(function (point) {
+        return {
+            geoCoord: getGeoCoord(point.name),
+            name: point.name,
+            value: point.cnt
+        }
+    });
+
+    myChart.setOption(option);
+}
+
+var flagPresentationMode;
+function togglePresentationMode(flag) {
+    if (flag) {
+        flagPresentationMode = setInterval('displayNextPresentation();', cfg.presentationInterval * 1000);
+    } else {
+        clearInterval(flagPresentationMode);
+    }
+}
+
+function displayNextPresentation(){
+    // Update Display
+    var cur = cfg.allProvinces.indexOf(cfg.currentProvince);
+    cur += 1;
+    if (cur==cfg.allProvinces.length) {
+        cur = 0;
+    }
+    cfg.currentProvince = cfg.allProvinces[cur];
+    // Update data
+    getCrossProvinceData();
+}
+
+// Create GUI
+function initGUI() {
+    gui = new dat.GUI();
+
+    var folder1 = gui.addFolder('Choose Parameters');
+    folder1.add(cfg, 'currentBatch', cfg.allBatches).onFinishChange(function(v){
+        getCrossProvinceData();
+    });
+    folder1.add(cfg, 'currentProvince', cfg.allProvinces).onFinishChange(function(v){
+        getCrossProvinceData();
+    }).listen();
+    folder1.add(cfg, 'currentLearnCenter', cfg.learnCenters).onFinishChange(function(v){ 
+        console.log("switch LC to " + v);
+        getCrossProvinceData();
+    });
+    folder1.add(cfg, 'enableGroup').onFinishChange(function(v){
+        if (v) { 
+            cfg.group = 'group'; 
+            cfg.lineColor = cfg.autoLineColor;
+            cfg.enableSourceShow = v;
+        }
+        else { 
+            cfg.group = 'nogroup'; 
+            cfg.lineColor = cfg.fixLineColor; 
+            cfg.enableSourceShow = v;
+        }
+        getCrossProvinceData();
+    });
+    folder1.open();
+
+    var folder2 = gui.addFolder('Display Parameters');
+
+    folder2.add(cfg, 'enableBundling').onFinishChange(function(v){
+        getCrossProvinceData();
+    });
+
+    var folder3 = gui.addFolder('Advance Parameters');
+    folder3.add(cfg, 'enableSourceLabel').onFinishChange(function(v){
+        getCrossProvinceData();
+    });
+
+    var folder4 = gui.addFolder('Presentation Mode');
+    folder4.add(cfg, 'presentationMode').onFinishChange(function(v){
+        togglePresentationMode(v);
+    });
+    folder4.add(cfg, 'presentationInterval', 5, 60);
+    folder4.open();
+
+    gui.add(cfg, 'refresh');
+
+}
+
+$(document).ready(function() {
+    initGUI();
+
+    // load students data
+    alasql.promise('SELECT * FROM CSV("/static/data/students.csv", {headers:true, quote:"\'", separator:","})')
+        .then(function(data){
+            for (var i=0; i<data.length; i++) {
+                alasql("INSERT INTO stus (:tbpkid, :batch, :lc, :prov, :cnty, :lc_prov, :lc_cnty)", data[i]);
+            }
+            
+            getCrossProvinceData();
+
+        }).catch(function(err){
+            console.log('Error:', err);
+        });
+
+});
+</script>
+</body>
+</html>
