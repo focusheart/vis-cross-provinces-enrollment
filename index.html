@@ -8,6 +8,7 @@
     </style>
 </head>
 <body>
+<div id="bars" style="width:25%;height:80px;position:absolute;left:10px;bottom:10px;"></div>
 <div id="main" style="width:1920px;height:1080px;"></div>
 <script src="/static/js/echarts-all.js"></script>
 <script src="/static/js/jquery-1.9.1.js"></script>
@@ -25,12 +26,21 @@ CREATE TABLE stus (
 );
 </script>
 <script>
+// set map canvas width and height
+document.getElementById('main').style.width = ""+window.innerWidth+"px";
+document.getElementById('main').style.height = ""+window.innerHeight+"px";
+// set bar chart width and height
+document.getElementById('bars').style.width = ""+(window.innerWidth*0.25)+"px";
+document.getElementById('bars').style.height = ""+(window.innerHeight*0.98)+"px";
+
 // local database
 alasql('SOURCE "#sql_create_tables"');
 // Dat.GUI
 var gui;
 // The Chart object of China map
 var myChart = echarts.init(document.getElementById('main'));
+var myBhart = echarts.init(document.getElementById('bars'));
+
 // Default learning center
 var lc = "000-全部学习中心";
 // default student source
@@ -44,13 +54,13 @@ var cfg = {
     provAreaColor: '#000000',    
     enableLarge: true,
     enableBundling: false,
-    enableGroup: false,
+    enableGroup: true,
     lineColor: 'rgba(2, 166, 253, 0.08)',
     autoLineColor: null,
     fixLineColor: 'rgba(2, 166, 253, 0.08)',
     enableSourceShow: false,
     enableSourceLabel: false,
-    group: 'nogroup',
+    group: 'group',
     currentBatch: bt,
     allBatches: ['1409'],
     defaultLearnCenter: "000-全部学习中心",
@@ -117,6 +127,70 @@ $.ajax({
     dataType: 'json'
 });
 
+// EChart option for lc enrollment
+function getLCOption() {
+    return {
+        title: {
+            x: 'left',
+            y:'bottom',
+            text: 'Learn Center Statistic',
+            textStyle: {
+                color: 'white'
+            }
+        },
+        grid: {
+            borderWidth: 0
+        },
+        tooltip: {
+            trigger: 'item'
+        },
+        toolbox: {
+            show: false
+        },
+        xAxis: [{
+            type: 'value',
+            show: false
+        }],
+        yAxis: [{
+            type: 'category',
+            axisLabel: {
+                textStyle: {
+                    color: 'white'
+                }
+            },
+            itemStyle: {
+                normal: {
+                    borderWidth: 0,
+                    barBorderWidth: 0,
+                    borderColor: 'white'
+                }
+            },
+            data: []
+        }],
+        series: [{
+            name: 'Learn Center Stat',
+            type: 'bar',
+            barMaxWidth: 24,
+            itemStyle: {
+                normal: {
+                    color: function(params) {
+                        // build a color map as your need.
+                        var r = parseInt(Math.random()*255);
+                        var g = parseInt(Math.random()*255);
+                        var b = parseInt(Math.random()*255);
+                        return 'rgb('+r+', '+g+', '+b+')';
+                    },
+                    label: {
+                        show: true,
+                        position: 'right',
+                        formatter: '{c}'
+                    }
+                }
+            },
+            data: []
+        }]
+    };
+}
 
 // EChart option of China map
 function getOption() {
@@ -138,6 +212,8 @@ function getOption() {
             }
         },
         dataRange: {
+            x: 'right',
+            y: 'bottom',
             min : 1,
             max : 100,
             calculable : true,
@@ -312,7 +388,7 @@ function getCrossProvinceData(){
         // append all lcs
         if (lc_list.indexOf(r_lc)<0) {
             lc_list.push(r_lc);
-            dt['allLC'].push({'name': lc_abbr});
+            dt['allLC'].push({'name': lc_abbr, 'cnt': r_cnt});
         }
 
         // append group?
@@ -357,8 +433,26 @@ function getCrossProvinceData(){
             value: point.cnt
         }
     });
-
     myChart.setOption(option);
+    
+    // Set the Bar chart
+    myBhart = echarts.init(document.getElementById('bars'));
+    option2 = getLCOption();
+
+    // Sort the lc count data
+    var allLCs = data.data.allLC;
+    allLCs.sort(function(a, b){ return a.cnt - b.cnt; });
+    var sorted_lc_cnts = [];
+    var sorted_lc_name = [];
+    for (var i=0; i<allLCs.length; i++) {
+        sorted_lc_name.push(allLCs[i].name);
+        sorted_lc_cnts.push(allLCs[i].cnt);
+    }
+    option2.series[0].data = sorted_lc_cnts;
+    // set the y axis labels
+    option2.yAxis[0].data = sorted_lc_name;
+    
+    myBhart.setOption(option2);
 }
 
 var flagPresentationMode;
