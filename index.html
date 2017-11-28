@@ -8,7 +8,7 @@
     </style>
 </head>
 <body>
-<div id="bars" style="width:25%;height:80px;position:absolute;left:10px;bottom:10px;"></div>
+<div id="bars" style="width:25%;height:80px;position:absolute;left:10px;top:40px;z-index:999;"></div>
 <div id="main" style="width:1920px;height:1080px;"></div>
 <script src="/static/js/echarts-all.js"></script>
 <script src="/static/js/jquery-1.9.1.js"></script>
@@ -51,14 +51,14 @@ var bt = '1409';
 var cfg = {
     // Black Style
     bgColor: '#000000',
-    provAreaColor: '#000000',    
+    provAreaColor: '#000000',
     enableLarge: true,
     enableBundling: false,
     enableGroup: true,
     lineColor: 'rgba(2, 166, 253, 0.08)',
     autoLineColor: null,
     fixLineColor: 'rgba(2, 166, 253, 0.08)',
-    enableSourceShow: false,
+    enableSourceShow: true,
     enableSourceLabel: false,
     group: 'group',
     currentBatch: bt,
@@ -94,6 +94,7 @@ $.ajax({
     },
     dataType: 'json'
 });
+// get lcenters for display droplist & click
 var lcenters;
 $.ajax({
     type: 'get',
@@ -107,8 +108,7 @@ $.ajax({
     },
     dataType: 'json'
 });
-// update config's learnCenters
-
+// update area's or lc's name -> geo code
 var areas;
 function getArea(code) {
     if (areas.hasOwnProperty(code)) {
@@ -132,8 +132,8 @@ function getLCOption() {
     return {
         title: {
             x: 'left',
-            y:'bottom',
-            text: 'Learn Center Statistic',
+            y:'top',
+            text: 'Learning Center Statistic',
             textStyle: {
                 color: 'white'
             }
@@ -153,6 +153,11 @@ function getLCOption() {
         }],
         yAxis: [{
             type: 'category',
+            name: 'Learning Center Name',
+            show: true,
+            splitLine: {
+                show: false
+            },
             axisLabel: {
                 textStyle: {
                     color: 'white'
@@ -193,11 +198,13 @@ function getLCOption() {
 }
 
 // EChart option of China map
-function getOption() {
+function getMapOption() {
     return {
         backgroundColor: cfg.bgColor,
         title : {
-            text: 'Cross Province Enrollment Detail ' + cfg.currentBatch,
+            text: 'Cross Province Enrollment Detail ' + cfg.currentBatch + 
+                  ' from ' + cfg.currentProvince.split('-')[1] +
+                  ' to ' + cfg.currentLearnCenter.split('-')[1],
             x:'left',
             y:'top',
             textStyle: {
@@ -229,8 +236,8 @@ function getOption() {
 
             itemStyle: {
                 normal: {
-                    borderColor:'rgba(100,149,237,0.7)',
-                    borderWidth:0.5,
+                    borderColor: 'rgba(100,149,237,0.7)',
+                    borderWidth: 0.5,
                     areaStyle: {
                         color: cfg.provAreaColor
                     },
@@ -328,7 +335,30 @@ function getOption() {
     };
 };
 
-function getCrossProvinceData(){
+function getCrossProvinceTotalData() {
+    var sql = "select lc, count(tbpkid) as cnt\n" +
+              "from stus\n" +
+              "where prov!=lc_prov\n" +
+              "group by lc\n"+
+              "order by cnt";
+    console.log(sql);
+    var rs = alasql(sql);
+    console.log('rs: ' + rs.length);
+    console.log(rs);
+
+    var data = {'lcs':[], 'cnt':[]};
+    for (var i=0; i<rs.length; i++) {
+        var r = rs[i];
+        var lc_cc = r['lc'].substring(2)
+        var lc_obj = lcenters[lc_cc];
+        var lc_ca = lc_obj['ca']
+        data['lcs'].push(lc_cc + '-' + lc_ca);
+        data['cnt'].push(r['cnt']);
+    }
+    return data;
+}
+
+function getCrossProvinceEnrollmentData() {
     var cur_lc = cfg.currentLearnCenter.split('-')[0];
     var cur_ss = cfg.currentProvince.split('-')[0];
     var cur_bt = cfg.currentBatch;
@@ -388,7 +418,7 @@ function getCrossProvinceData(){
         // append all lcs
         if (lc_list.indexOf(r_lc)<0) {
             lc_list.push(r_lc);
-            dt['allLC'].push({'name': lc_abbr, 'cnt': r_cnt});
+            dt['allLC'].push({'code': r_lc, 'name': lc_abbr, 'cnt': r_cnt});
         }
 
         // append group?
@@ -401,9 +431,13 @@ function getCrossProvinceData(){
     var data = {'data': dt, 'success': true};
     console.log(data);
 
+    return data;
+}
+
+function drawLCCrossProvinceEnrollmentMap(data){
     // Refresh the Map
     myChart = echarts.init(document.getElementById('main'));
-    option = getOption();
+    option = getMapOption();
 
     // Set the stream data
     option.series[0].markLine.data = data.data.allCross.map(function (line) {
@@ -434,25 +468,31 @@ function getCrossProvinceData(){
         }
     });
     myChart.setOption(option);
-    
+}
+
+function drawLCBarChart(data) {
     // Set the Bar chart
     myBhart = echarts.init(document.getElementById('bars'));
     option2 = getLCOption();
 
     // Sort the lc count data
-    var allLCs = data.data.allLC;
-    allLCs.sort(function(a, b){ return a.cnt - b.cnt; });
-    var sorted_lc_cnts = [];
-    var sorted_lc_name = [];
-    for (var i=0; i<allLCs.length; i++) {
-        sorted_lc_name.push(allLCs[i].name);
-        sorted_lc_cnts.push(allLCs[i].cnt);
-    }
-    option2.series[0].data = sorted_lc_cnts;
+    // var allLCs = data.data.allLC;
+    // allLCs.sort(function(a, b){ return a.cnt - b.cnt; });
+    // var sorted_lc_cnts = [];
+    // var sorted_lc_name = [];
+    // for (var i=0; i<allLCs.length; i++) {
+    //     sorted_lc_name.push(allLCs[i].code + '-' + allLCs[i].name);
+    //     sorted_lc_cnts.push(allLCs[i].cnt);
+    // }
+    option2.series[0].data = data.cnt;
     // set the y axis labels
-    option2.yAxis[0].data = sorted_lc_name;
+    option2.yAxis[0].data = data.lcs;
     
     myBhart.setOption(option2);
+    myBhart.on('click', function (params) {
+        cfg.currentLearnCenter = params.name;
+        updateMap();
+    });
 }
 
 var flagPresentationMode;
@@ -476,20 +516,32 @@ function displayNextPresentation(){
     getCrossProvinceData();
 }
 
+function updateMap() {
+    var data = getCrossProvinceEnrollmentData();
+    drawLCCrossProvinceEnrollmentMap(data);
+}
+
+function updateBarAndMap() {
+    var data = getCrossProvinceEnrollmentData();
+    drawLCCrossProvinceEnrollmentMap(data);
+    var ttdt = getCrossProvinceTotalData();
+    drawLCBarChart(ttdt);
+}
+
 // Create GUI
 function initGUI() {
     gui = new dat.GUI();
 
     var folder1 = gui.addFolder('Choose Parameters');
     folder1.add(cfg, 'currentBatch', cfg.allBatches).onFinishChange(function(v){
-        getCrossProvinceData();
+        updateBarAndMap();
     });
     folder1.add(cfg, 'currentProvince', cfg.allProvinces).onFinishChange(function(v){
-        getCrossProvinceData();
+        updateMap();
     }).listen();
     folder1.add(cfg, 'currentLearnCenter', cfg.learnCenters).onFinishChange(function(v){ 
         console.log("switch LC to " + v);
-        getCrossProvinceData();
+        updateMap();
     });
     folder1.add(cfg, 'enableGroup').onFinishChange(function(v){
         if (v) { 
@@ -502,24 +554,24 @@ function initGUI() {
             cfg.lineColor = cfg.fixLineColor; 
             cfg.enableSourceShow = v;
         }
-        getCrossProvinceData();
+        updateMap();
     });
     folder1.open();
 
     var folder2 = gui.addFolder('Display Parameters');
 
     folder2.add(cfg, 'enableBundling').onFinishChange(function(v){
-        getCrossProvinceData();
+        updateMap();
     });
 
     var folder3 = gui.addFolder('Advance Parameters');
     folder3.add(cfg, 'enableSourceLabel').onFinishChange(function(v){
-        getCrossProvinceData();
+        updateMap();
     });
 
     var folder4 = gui.addFolder('Presentation Mode');
     folder4.add(cfg, 'presentationMode').onFinishChange(function(v){
-        togglePresentationMode(v);
+        updateMap(v);
     });
     folder4.add(cfg, 'presentationInterval', 5, 60);
     folder4.open();
@@ -530,20 +582,16 @@ function initGUI() {
 
 $(document).ready(function() {
     initGUI();
-
     // load students data
     alasql.promise('SELECT * FROM CSV("/static/data/students.csv", {headers:true, quote:"\'", separator:","})')
         .then(function(data){
             for (var i=0; i<data.length; i++) {
                 alasql("INSERT INTO stus (:tbpkid, :batch, :lc, :prov, :cnty, :lc_prov, :lc_cnty)", data[i]);
             }
-            
-            getCrossProvinceData();
-
+            updateBarAndMap();
         }).catch(function(err){
             console.log('Error:', err);
         });
-
 });
 </script>
 </body>
